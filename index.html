@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <script src="//d3js.org/d3.v4.min.js"></script>
+<script src="https://unpkg.com/viz.js@1.8.0/viz.js" type="javascript/worker"></script>
+<script src="https://unpkg.com/d3-graphviz@1.4.0/build/d3-graphviz.min.js"></script>
+        <style>
+            table {
+                width: 100%;
+                height: 100%;
+            }
+
+            .textAreaWrapper {
+                width: 100%;
+                height: 80vh;
+            }
+
+            textarea {
+                width: 60%;
+                height: 95%;
+            }
+            .green{
+                background-color: greenyellow;
+                width: 50%;
+                border-radius: 5px;
+            }
+            .red{
+                background-color:orangered;
+                width: 50%;
+                border-radius: 5px;
+            }
+            .output{
+                font-family: cursive;
+                margin-left: 40%;
+                background-color: #90d6c22b;
+                border-radius: 5px;
+                padding: 40px 0px 40px 40px;
+                box-shadow: 2px 1px 10px 1px;
+            }
+            .inputArea{
+                font-size: 23px;
+                height: 30px;
+                width: 200px;
+                border-radius: 5px;
+                margin-right: 30px;
+                box-shadow: 1px 5px 56px 14px #c4e3ff;
+                font-family: cursive;
+            }
+            .submitBtn{
+                border-radius: 5px;
+                padding: 9px 13px 9px 13px;
+                background-color: #ddfba1;
+                font-family: cursive;
+            }
+        </style>
+    </head>
+    <body>
+        <table>
+            <tr>
+                <td>
+                    <div>
+                        <label>Enter code here</label>
+                    </div>
+                </td>
+                <td>
+                    <div>
+                        <label>Parsed code here</label>
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <div class="textAreaWrapper">
+                        <textarea id="codePlaceholder" title="Enter code here"></textarea>
+                    </div>
+                </td>
+                <td>
+                    <div class="textAreaWrapper">
+                        <textarea id="parsedCode" title="Parse code"></textarea>
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <div>
+                            <input class="inputArea" id="functionInput" type="text" width="400">
+                        <button class='submitBtn' id="codeSubmissionButton">Call Function</button>
+                    </div>
+                </td>
+                <td>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                        <div class="textAreaWrapper">
+                <div class="output" id="outPutFunction">The result will appear here.</div>
+                </div>
+                
+                </td>
+            </tr>
+        </table>
+        <script src="dist/bundle.js"></script>
+        <script src="dist/types.d.ts"></script>
+    </body>
+</html>
