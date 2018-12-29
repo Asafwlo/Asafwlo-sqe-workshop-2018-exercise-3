@@ -2,26 +2,29 @@ import $ from 'jquery';
 import {cfgCode, parseCode, objectTable} from './code-analyzer';
 import {Parser} from 'expr-eval';
 import * as esgraph from 'esgraph';
-import Viz from 'viz.js';
-import workerURL from 'viz.js/full.render.js';
 import * as d3 from 'd3-graphviz';
 
 
 var greenList = [];
+var greenNodes = [];
+var ifNodes = [];
+var white = '#ffffff';
+var green = '#2ca02c';
 var parser = new Parser({operators:{'in':true, '<':true, '>': true, '==': true, '!=': true, '<=': true, '>=': true}});
 
 $(document).ready(function () {
     $('#codeSubmissionButton').click(() => {
+        init();
         let inputcodeToParse = $('#codePlaceholder').val();
         let inputFunc = document.getElementById('functionInput').value;
         let codeToParse = replaceParams(inputFunc, inputcodeToParse);
         let parsedCode = parseCode(codeToParse);
         $('#parsedCode').val(JSON.stringify(parsedCode, null, 2));
         try{
-            setGreens(parsedCode);
+            getGreens(parsedCode);
             var dotParsedCode = cfgCode(inputcodeToParse);
-            let dot = esgraph.dot(dotParsedCode, { counter: 0, source: inputcodeToParse });
-            dot = fixLines(dot);
+            getOtherGreens(dotParsedCode);
+            let dot = createDot(dotParsedCode, inputcodeToParse);
             d3.graphviz('#outPutFunction').renderDot('digraph{'+dot+'}');
         } catch (error){
             throw new 'Invalid Input.';
@@ -29,19 +32,145 @@ $(document).ready(function () {
     });
 });
 
-function setGreens(parsedCode){
+function init(){
+    greenList = [];
+    greenNodes = [];
+    ifNodes = [];
+}
+
+function createDot(dotParsedCode, inputcodeToParse)
+{
+    let dot = esgraph.dot(dotParsedCode, { counter: 0, source: inputcodeToParse });
+    dot = fixLines(dot);
+    dot = paintOtherGreens(dot);
+    return dot;
+}
+
+function getGreens(parsedCode)
+{
+    let counter = 1;
     let functionJsoned = objectTable(parsedCode);
     let drawn = drawFunction(functionJsoned);
     let lines = drawn.split('</p>');
     for (let index = 0; index < lines.length; index++)
         if (lines[index].includes('green'))
         {
-            let s = lines[index].indexOf('>');
-            let e = lines[index].indexOf('{', s);
-            greenList.push(lines[index].substring(s+1, e-1));
+            greenList.push(counter);
+            counter++;
         }
-             
+        else if (lines[index].includes('red'))
+            counter++;
 }
+
+function isIf(cfgCode)
+{
+    let expressions = ['BinaryExpression'];
+    if ('astNode' in cfgCode && cfgCode.astNode != undefined && 'type' in cfgCode.astNode && expressions.indexOf(cfgCode.astNode.type) > -1)
+        return true;
+    return false;
+}
+
+function getOtherGreens(cfgCode, add = true, nodeCounter = 0, counter = 1){
+    let curr = cfgCode;
+    let nextNodeCounter = undefined;
+    if (nodeCounter == 0)
+        curr = cfgCode[2][0];
+    do {
+        let currName = undefined;
+        if ('nodeName' in curr)
+            currName = curr.nodeName;
+        curr['nodeName'] = 'n' + nodeCounter;
+        if (isIf(curr)){
+            if (greenList.indexOf(counter) > -1)
+                curr = getNode(curr.true);
+            else{
+                nextNodeCounter = getOtherGreens(curr.true, false, nodeCounter + 1, counter+1);
+                curr = getNode(curr.false);
+            }
+            counter++;
+            if (currName != undefined)
+                ifNodes.push(currName);
+            else
+                ifNodes.push('n' + nodeCounter);
+        }
+        else
+            curr = getNode(curr.next);
+        if (add)
+        {
+            if (currName != undefined)
+                greenNodes.push(currName);
+            else
+                greenNodes.push('n' + nodeCounter);
+        }
+        if (currName == undefined)
+            nodeCounter++;
+        if (nextNodeCounter != undefined){
+            nodeCounter = nextNodeCounter;
+            nextNodeCounter = undefined;
+        }
+    } while (curr != undefined);
+    return nodeCounter;
+}
+
+function getNode(cfgItem)
+{
+    if ('astNode' in cfgItem)
+        return cfgItem;
+    else
+        for (let index = 0; index < cfgItem.length; index++)
+            if (cfgItem[index].astNode != undefined)
+                return cfgItem[index];
+    
+    return undefined;
+}
+
+function paintOtherGreens(dot)
+{
+    let lines = dot.split('\n');
+    for (let index = 0; index < lines.length; index++)
+    {
+        let node = lines[index].substring(0, lines[index].indexOf(' '));
+        if (isGreenNodeLine(node, lines, index))
+        {
+            if (!lines[index].includes('fillcolor'))
+                lines[index] = saveLine(node, lines, index);
+            else
+                lines[index] = lines[index].substring(0, lines[index].indexOf('fillcolor')) + 'fillcolor="'+green+'"]';
+        }
+        else if (isNodeLine(node, lines, index))
+            lines[index] = makeSquare(lines, index);
+    }
+    return lines.join('\n');
+}
+
+function saveLine(node, lines, index)
+{
+    if (ifNodes.indexOf(node) > -1)
+        return lines[index].substring(0, lines[index].indexOf(']')) + ' shape="diamond" style="filled" fillcolor="'+green+'"]';
+    else
+        return lines[index].substring(0, lines[index].indexOf(']')) + ' shape="box" style="filled" fillcolor="'+green+'"]';
+}
+
+function isGreenNodeLine(node, lines, index)
+{
+    if (greenNodes.indexOf(node) > -1 && lines[index].includes(']')  && lines[index].includes(node) && !lines[index].includes('->'))
+        return true;
+    return false;
+}
+
+function isNodeLine(node, lines, index)
+{
+    if (lines[index].includes(']')  && lines[index].includes(node) && !lines[index].includes('->') && lines[index][0] === 'n')
+        return true;
+    return false;
+
+}
+
+function makeSquare(lines, index)
+{
+    return lines[index].substring(0, lines[index].indexOf(']')) + ' shape="box" style="filled" fillcolor="'+white+'"]';
+}
+
 function fixLines(dot){
     let lines = dot.split('\n');
     for (let index = 0; index < lines.length; index++)
