@@ -1,5 +1,7 @@
 import assert from 'assert';
-import {parseCode, objectTable} from '../src/js/code-analyzer';
+import {parseCode} from '../src/js/code-analyzer';
+import {getRefinedFunc} from '../src/js/refine';
+import {getDot, getGreens} from '../src/js/dot';
 
 describe('The javascript parser', () => {
     it('is parsing an empty function correctly', () => {
@@ -18,83 +20,24 @@ describe('The javascript parser', () => {
 });
 
 describe('The convertion from parsed data to models object',()=>{
-    it('is converting simple variable declaration correctly', ()=>{
-        var codeToParse = 'let x=2;function foo(x) {let a = x; return a;}';
-        var inputFunc = 'foo(2)';
-        var parsed = parseCode(codeToParse);
-        var data = objectTable(parsed);
-        assert.equal(JSON.stringify(data),'{"func":["function foo(x) {","return x;","}"],"values":{"x":2}}');
-    });
-    it('is converting simple if correctly', ()=>{
-        var codeToParse = 'let x=2;function foo(x){let a = x;if (a<3){return a+1;}return a;}';
-        var inputFunc = 'foo(2)';
-        var parsed = parseCode(codeToParse);
-        var data = objectTable(parsed);
-        assert.equal(JSON.stringify(data),'{"func":["function foo(x) {","if (x<3) {","return x+1;","}","return x;","}"],"values":{"x":2}}');
-    });
-    it('is converting simple if else correctly', ()=>{
-        var codeToParse = 'let x=2;function foo(x){let a = x + 1;if (a < 3) {return a;} else {return a+2;}}';
-        var inputFunc = 'foo(2)';
-        var parsed = parseCode(codeToParse);
-        var data = objectTable(parsed);
-        assert.equal(JSON.stringify(data),'{"func":["function foo(x) {","if (x+1<3) {","return x+1;","}","else {","return x+1+2;","}","}"],"values":{"x":2}}');
-    });
-    it('is converting simple if else if correctly', ()=>{
-        var codeToParse = 'let x=2;function foo(x){let a = x + 1;if (a < 3) {return a;} else if (a >= 3) {return a+2;}}';
-        var inputFunc = 'foo(2)';
-        var parsed = parseCode(codeToParse);
-        var data = objectTable(parsed);
-        assert.equal(JSON.stringify(data),'{"func":["function foo(x) {","if (x+1<3) {","return x+1;","}","else if (x+1>=3) {","return x+1+2;","}","}"],"values":{"x":2}}');
-    });
-    it('is converting complex if function correctly', ()=>{
-        var codeToParse = 'let x=1;let y=2;let z=3;function foo(x, y, z){let a = x + 1;let b = a + y;let c = 0;if (b < z) {c = c + 5;return x + y + z + c;} else if (b < z * 2) {c = c + x + 5;return x + y + z + c;} else {c = c + z + 5;return x + y + z + c;}}';
-        var inputFunc = 'foo(1,2,3)';
-        var parsed = parseCode(codeToParse);
-        var data = objectTable(parsed);
-        assert.equal(JSON.stringify(data),'{"func":["function foo(x, y, z) {","if (x+1+y<z) {","return x+y+z+5;","}","else if (x+1+y<z*2) {","return x+y+z+x+5;","}","else {","return x+y+z+z+5;","}","}"],"values":{"x":1,"y":2,"z":3}}');
-    });
-    it('is converting simple while function correctly', ()=>{
-        var codeToParse = 'let x=1;let y=2;let z=3;function foo(x, y, z){let a = x + 1;let b = a + y;let c = 0;while (a < z) {c = a + b;z = c * 2;}        return z;}';
-        var inputFunc = 'foo(1,2,3)';
-        var parsed = parseCode(codeToParse);
-        var data = objectTable(parsed);
-        assert.equal(JSON.stringify(data),'{"func":["function foo(x, y, z) {","while (x+1<z) {","z = (x+1+x+1+y)*2;","}","return z;","}"],"values":{"x":1,"y":2,"z":"(x+1+x+1+y)*2"}}');
-    });
+    it('is converting first example', ()=>{
+        let inputcodeToParse = 'function foo(x, y, z){let a = x + 1;let b = a + y;let c = 0;if (b < z) {c = c + 5;} else if (b < z * 2) {c = c + x + 5;} else {c = c + z + 5;}return c;}';
+        let inputFunc = '(1,2,3)';
+        let codeToParse = getRefinedFunc(inputFunc, inputcodeToParse);
+        let parsedCode = parseCode(codeToParse);
+        let gList = getGreens(parsedCode);
+        let dot = getDot(inputcodeToParse, gList);
 
-    it('is converting simple array correctly', ()=>{
-        var codeToParse = 'let x=[1,2,3];function foo(x){a = x[2] + 1;if (a < 5){return x[1];}}';
-        var inputFunc = 'foo([1,2,3])';
-        var parsed = parseCode(codeToParse);
-        var data = objectTable(parsed);
-        assert.equal(JSON.stringify(data),'{"func":["function foo(x) {","if (x[2]+1<5) {","return x[1];","}","}"],"values":{"x":"[1,2,3]","x_0_":1,"x_1_":2,"x_2_":3}}');
+        assert.equal(dot,'\n\n\nn3 [label="let a = x + 1;\nlet b = a + y;\nlet c = 0;" shape="box" style="filled" fillcolor="#2ca02c"]\nn4 [label="b < z" shape="diamond" style="filled" fillcolor="#2ca02c"]\nn5 [label="c = c + 5" shape="box" style="filled" fillcolor="#ffffff"]\nn6 [label="" style="filled" fillcolor="#2ca02c"]\nn7 [label="b < z * 2" shape="diamond" style="filled" fillcolor="#2ca02c"]\nn8 [label="c = c + x + 5" shape="box" style="filled" fillcolor="#2ca02c"]\nn9 [label="c = c + z + 5" shape="box" style="filled" fillcolor="#ffffff"]\n\n\n\n\n\n\nn3 -> n4 []\nn4 -> n5 [label="true"]\nn4 -> n7 [label="false"]\n\nn5 -> n6 []\n\n\nn7 -> n8 [label="true"]\nn7 -> n9 [label="false"]\n\nn8 -> n6 []\n\nn9 -> n6 []\n\n\nn99 [shape="box" label="return c;" shape="box" style="filled" fillcolor="#2ca02c" style="filled" fillcolor="#2ca02c"]\nn6 -> n99 []');
     });
-    it('is converting complex complex If statement correctly2', ()=>{
-        var codeToParse = 'let a=true;let b=false;function foo(a, b){if(true||(a&&b)){return true;}if(!true){return false;}}';
-        var inputFunc = 'foo(true, false)';
-        var parsed = parseCode(codeToParse);
-        var data = objectTable(parsed);
-        assert.equal(JSON.stringify(data),'{"func":["function foo(a, b) {","if (true||a&&b) {","return true;","}","if (!true) {","return false;","}","}"],"values":{"a":true,"b":false}}');
+    it('is converting second example', ()=>{
+        let inputcodeToParse = 'function foo(x, y, z){let a = x + 1;let b = a + y;let c = 0;while (a < z) {c = a + b;z = c * 2;a++;}return z;}';
+        let inputFunc = '(1,2,3)';
+        let codeToParse = getRefinedFunc(inputFunc, inputcodeToParse);
+        let parsedCode = parseCode(codeToParse);
+        let gList = getGreens(parsedCode);
+        let dot = getDot(inputcodeToParse, gList);
+
+        assert.equal(dot,'\n\n\nn3 [label="let a = x + 1;\nlet b = a + y;\nlet c = 0;" shape="box" style="filled" fillcolor="#ffffff"]\nn4 [label="a < z" shape="box" style="filled" fillcolor="#ffffff" shape="diamond"]\nn5 [label="c = a + b" shape="box" style="filled" fillcolor="#ffffff"]\nn6 [label="z = c * 2" shape="box" style="filled" fillcolor="#ffffff"]\nn7 [label="a++" shape="box" style="filled" fillcolor="#ffffff"]\nn8 [label="" style="filled" fillcolor="#ffffff"]\n\n\n\n\n\n\nn3 -> n4 []\nn4 -> n5 [label="true" shape="diamond"]\nn4 -> n8 [label="false" shape="diamond"]\n\nn5 -> n6 []\n\nn6 -> n7 []\n\nn7 -> n4 []\n\n\nn99 [shape="box" label="return z;" shape="box" style="filled" fillcolor="#ffffff" style="filled" fillcolor="#ffffff"]\nn8 -> n99 []');
     });
-    it('is converting defualt value and string correctly', ()=>{
-        var codeToParse = 'let x=\'2\';function foo(x,y=false){if (y && x==\'2\')return true;}';
-        var inputFunc = 'foo(\'2\')';
-        var parsed = parseCode(codeToParse);
-        var data = objectTable(parsed);
-        assert.equal(JSON.stringify(data),'{"func":["function foo(x, y) {","if (y&&x==\'2\') {","return true;","}","}"],"values":{"x":"2","y":false}}');
-    });
-    it('is converting empty assignment and default dec correctly', ()=>{
-        var codeToParse = 'let x=[1,2];let y=false;function foo(x, y=true){x[1] = 3;let b;let a = 0;let c = 5+a;if (x[1]==3){return c;}}';
-        var inputFunc = 'foo([1,2], false)';
-        var parsed = parseCode(codeToParse);
-        var data = objectTable(parsed);
-        assert.equal(JSON.stringify(data),'{"func":["function foo(x, y) {","x[1] = 3;","if (x[1]==3) {","return 5;","}","}"],"values":{"x":"[1,2]","y":false,"x[1]":3,"x_0_":1,"x_1_":2}}');
-    });
-    it('is converting while and array correctly', ()=>{
-        var codeToParse = 'let x=[2,1];function foo(x){let a = [1,2];if (x[0]==a[1]){while(true){return true;}}return;}';
-        var inputFunc = 'foo([2,1])';
-        var parsed = parseCode(codeToParse);
-        var data = objectTable(parsed);
-        assert.equal(JSON.stringify(data),'{"func":["function foo(x) {","if (x[0]==2) {","while (true) {","return true;","}","}","return null;","}"],"values":{"x":"[2,1]","a":"[1,2]","x_0_":2,"x_1_":1,"a_0_":1,"a_1_":2}}');
-    });
-    
 });

@@ -1,5 +1,7 @@
 import * as esgraph from 'esgraph';
-import {cfgCode} from './code-analyzer';
+import {cfgCode, objectTable} from './code-analyzer';
+import {Parser} from 'expr-eval';
+
 
 
 var greenList = [];
@@ -8,7 +10,8 @@ var whileNodes = [];
 var ifNodes = [];
 var white = '#ffffff';
 var green = '#2ca02c';
-var nConnect = [];
+var parser = new Parser({operators:{'in':true, '<':true, '>': true, '==': true, '!=': true, '<=': true, '>=': true}});
+
 
 export function getDot(inputcodeToParse, gList){
     init();
@@ -274,4 +277,105 @@ function fixDecs(lines, index){
             break;
         }
     return [lines, index, n];
+}
+
+export function getGreens(parsedCode)
+{
+    init();
+    let counter = 1;
+    let functionJsoned = objectTable(parsedCode);
+    let drawn = drawFunction(functionJsoned);
+    let lines = drawn.split('</p>');
+    for (let index = 0; index < lines.length; index++)
+        if (lines[index].includes('green'))
+        {
+            greenList.push(counter);
+            counter++;
+        }
+        else if (lines[index].includes('red'))
+            counter++;
+    return greenList;
+}
+
+String.prototype.replaceAll = function (search, replacement) {
+    var target = this;
+    return target.replace(new RegExp(search, 'g'), replacement);
+};
+
+
+
+
+function drawElseIf(funcObject, toPrint, parser, ifVal, color, row){
+    var exp = funcObject.func[row].substring(9,funcObject.func[row].length-3);
+    exp = exp.replace(/\[/g,'_').replace(/\]/g,'_').replace(/&&/g,' and ').replace(/\|\|/g,' or ');
+    var sol = parser.evaluate(exp, funcObject.values);
+    if (!ifVal && sol){
+        color = 'green';
+        ifVal = true;
+    }
+    else {
+        color = 'red';
+        ifVal = false;
+    }
+    toPrint += '<p class="'+color+'">'+funcObject.func[row].replace(/</g,' &lt; ').replace(/>/g,' &gt; ')+'</p>';
+    while (funcObject.func[row+1] !== '}')
+    {
+        row++;
+        toPrint += '<p>'+funcObject.func[row]+'</p>';
+    }
+    return {'toPrint': toPrint, 'ifVal': ifVal, 'row': row};
+}
+
+function drawElse(toPrint, ifVal, color, funcObject, row){
+    if (ifVal)
+        color = 'red';
+    else
+        color = 'green';
+    toPrint += '<p class="'+color+'">'+funcObject.func[row]+'</p>';
+    while (funcObject.func[row+1] !== '}')
+    {
+        row++;
+        toPrint += '<p>'+funcObject.func[row]+'</p>';
+    }
+    return {'toPrint': toPrint, 'ifVal': ifVal, 'row': row};
+}
+
+function drawIf(sol, parser,color,ifVal, funcObject,toPrint, row){
+    var exp = funcObject.func[row].substring(4,funcObject.func[row].length-3);
+    exp = exp.replace(/\[/g,'_').replace(/\]/g,'_').replace(/&&/g,' and ').replace(/\|\|/g,' or ');
+    sol = parser.evaluate(exp, funcObject.values);
+    if (sol){
+        color = 'green';
+        ifVal = true;
+    }
+    else{
+        color = 'red';
+        ifVal = false;
+    }
+    toPrint += '<p class="'+color+'">'+funcObject.func[row].replace(/</g,' &lt; ').replace(/>/g,' &gt; ')+'</p>';
+    while (funcObject.func[row+1] !== '}')
+    {
+        row++;
+        toPrint += '<p>'+funcObject.func[row]+'</p>';
+    }
+    return {'toPrint': toPrint, 'ifVal': ifVal, 'row': row};
+}
+
+function drawFunction(funcObject){
+    var toPrint = '', ifVal = false, sol, color;
+    for (var row=0; row < funcObject.func.length; row++)
+        if (funcObject.func[row].includes('else if')){
+            let res = drawElseIf(funcObject, toPrint, parser, ifVal,color, row);
+            toPrint = res.toPrint; ifVal = res.ifVal; row = res.row;
+        } else if (funcObject.func[row].includes('else')){
+            let res = drawElse(toPrint, ifVal, color, funcObject, row);
+            toPrint = res.toPrint; ifVal = res.ifVal; row = res.row;
+        } else if (funcObject.func[row].includes('if')){
+            let res = drawIf(sol, parser,color, ifVal, funcObject, toPrint, row);
+            toPrint = res.toPrint; ifVal = res.ifVal; row = res.row;
+        }
+        else
+            toPrint += '<p>'+funcObject.func[row].replace(/</g,' &lt; ').replace(/>/g,' &gt; ')+'</p>';
+    //document.getElementById('outPutFunction').innerHTML = toPrint;
+    return toPrint;
 }
