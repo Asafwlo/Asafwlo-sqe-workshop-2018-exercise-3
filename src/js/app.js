@@ -1,15 +1,13 @@
 import $ from 'jquery';
-import {cfgCode, parseCode, objectTable} from './code-analyzer';
+import {parseCode, objectTable} from './code-analyzer';
+import {getDot} from './dot';
 import {Parser} from 'expr-eval';
-import * as esgraph from 'esgraph';
 import * as d3 from 'd3-graphviz';
 
 
 var greenList = [];
 var greenNodes = [];
 var ifNodes = [];
-var white = '#ffffff';
-var green = '#2ca02c';
 var parser = new Parser({operators:{'in':true, '<':true, '>': true, '==': true, '!=': true, '<=': true, '>=': true}});
 
 $(document).ready(function () {
@@ -22,9 +20,7 @@ $(document).ready(function () {
         $('#parsedCode').val(JSON.stringify(parsedCode, null, 2));
         try{
             getGreens(parsedCode);
-            var dotParsedCode = cfgCode(inputcodeToParse);
-            getOtherGreens(dotParsedCode);
-            let dot = createDot(dotParsedCode, inputcodeToParse);
+            let dot = getDot(inputcodeToParse, greenList);
             d3.graphviz('#outPutFunction').renderDot('digraph{'+dot+'}');
         } catch (error){
             throw new 'Invalid Input.';
@@ -36,14 +32,6 @@ function init(){
     greenList = [];
     greenNodes = [];
     ifNodes = [];
-}
-
-function createDot(dotParsedCode, inputcodeToParse)
-{
-    let dot = esgraph.dot(dotParsedCode, { counter: 0, source: inputcodeToParse });
-    dot = fixLines(dot);
-    dot = paintOtherGreens(dot);
-    return dot;
 }
 
 function getGreens(parsedCode)
@@ -64,51 +52,57 @@ function getGreens(parsedCode)
 
 function isIf(cfgCode)
 {
-    let expressions = ['BinaryExpression'];
-    if ('astNode' in cfgCode && cfgCode.astNode != undefined && 'type' in cfgCode.astNode && expressions.indexOf(cfgCode.astNode.type) > -1)
+    if ('parent' in cfgCode && cfgCode.parent != undefined && 'type' in cfgCode.parent && cfgCode.parent.type == 'IfStatement') 
         return true;
     return false;
 }
 
+function getIfGreen(curr, counter, nextNodeCounter, nodeCounter, currName){
+    if (greenList.indexOf(counter) > -1)
+        curr = getNode(curr.true);
+    else {
+        nextNodeCounter = getOtherGreens(curr.true, false, nodeCounter + 1, counter+1);
+        curr = getNode(curr.false);
+    }
+    if (currName != undefined)
+        ifNodes.push(currName);
+    else
+        ifNodes.push('n' + nodeCounter);
+    return [curr, nextNodeCounter];
+}
+
 function getOtherGreens(cfgCode, add = true, nodeCounter = 0, counter = 1){
-    let curr = cfgCode;
-    let nextNodeCounter = undefined;
-    if (nodeCounter == 0)
-        curr = cfgCode[2][0];
     do {
-        let currName = undefined;
-        if ('nodeName' in curr)
-            currName = curr.nodeName;
-        curr['nodeName'] = 'n' + nodeCounter;
-        if (isIf(curr)){
-            if (greenList.indexOf(counter) > -1)
-                curr = getNode(curr.true);
-            else{
-                nextNodeCounter = getOtherGreens(curr.true, false, nodeCounter + 1, counter+1);
-                curr = getNode(curr.false);
-            }
-            counter++;
-            if (currName != undefined)
-                ifNodes.push(currName);
-            else
-                ifNodes.push('n' + nodeCounter);
-        }
-        else
-            curr = getNode(curr.next);
-        if (add)
-        {
-            if (currName != undefined)
-                greenNodes.push(currName);
-            else
-                greenNodes.push('n' + nodeCounter);
-        }
+        let nextNodeCounter = undefined;
+        let currName = cfgCode.nodeName;
         if (currName == undefined)
-            nodeCounter++;
-        if (nextNodeCounter != undefined){
-            nodeCounter = nextNodeCounter;
-            nextNodeCounter = undefined;
-        }
-    } while (curr != undefined);
+            cfgCode['nodeName'] = 'n' + nodeCounter;
+        if (isIf(cfgCode)) {
+            let res = getIfGreen(cfgCode, counter, nextNodeCounter, nodeCounter, currName);
+            cfgCode = res[0]; 
+            nextNodeCounter = res[1]; 
+            counter++;
+        } else
+            cfgCode = getNode(cfgCode.next);
+        if (add)
+            insertToGreenNodes(currName, nodeCounter);
+        nodeCounter = setNodeCounter(nextNodeCounter, nodeCounter,currName);
+    } while (cfgCode != undefined);
+    return nodeCounter;
+}
+
+function insertToGreenNodes(currName, nodeCounter){
+    if (currName != undefined)
+        greenNodes.push(currName);
+    else
+        greenNodes.push('n' + nodeCounter);
+}
+
+function setNodeCounter(nextNodeCounter, nodeCounter,currName){
+    if (nextNodeCounter != undefined)
+        return nextNodeCounter;
+    else if (currName == undefined)
+        return ++nodeCounter;
     return nodeCounter;
 }
 
@@ -122,96 +116,6 @@ function getNode(cfgItem)
                 return cfgItem[index];
     
     return undefined;
-}
-
-function paintOtherGreens(dot)
-{
-    let lines = dot.split('\n');
-    for (let index = 0; index < lines.length; index++)
-    {
-        let node = lines[index].substring(0, lines[index].indexOf(' '));
-        if (isGreenNodeLine(node, lines, index))
-        {
-            if (!lines[index].includes('fillcolor'))
-                lines[index] = saveLine(node, lines, index);
-            else
-                lines[index] = lines[index].substring(0, lines[index].indexOf('fillcolor')) + 'fillcolor="'+green+'"]';
-        }
-        else if (isNodeLine(node, lines, index))
-            lines[index] = makeSquare(lines, index);
-    }
-    return lines.join('\n');
-}
-
-function saveLine(node, lines, index)
-{
-    if (ifNodes.indexOf(node) > -1)
-        return lines[index].substring(0, lines[index].indexOf(']')) + ' shape="diamond" style="filled" fillcolor="'+green+'"]';
-    else
-        return lines[index].substring(0, lines[index].indexOf(']')) + ' shape="box" style="filled" fillcolor="'+green+'"]';
-}
-
-function isGreenNodeLine(node, lines, index)
-{
-    if (greenNodes.indexOf(node) > -1 && lines[index].includes(']')  && lines[index].includes(node) && !lines[index].includes('->'))
-        return true;
-    return false;
-}
-
-function isNodeLine(node, lines, index)
-{
-    if (lines[index].includes(']')  && lines[index].includes(node) && !lines[index].includes('->') && lines[index][0] === 'n')
-        return true;
-    return false;
-
-}
-
-function makeSquare(lines, index)
-{
-    return lines[index].substring(0, lines[index].indexOf(']')) + ' shape="box" style="filled" fillcolor="'+white+'"]';
-}
-
-function fixLines(dot){
-    let lines = dot.split('\n');
-    for (let index = 0; index < lines.length; index++)
-        if (lines[index].includes('label="exception"'))
-            lines[index] = '';
-        else if (lines[index].includes('let'))
-        {
-            let res = fixDecs(lines, index);
-            index = res[1];
-            lines = res[0];
-            lines = removeNodes(lines, res[2]);
-        }
-    return lines.join('\n');
-}
-
-function removeNodes(lines, n)
-{
-    for (let index = 0; index < lines.length; index++)
-        for (let jndex = 0; jndex < n.length-1; jndex++)
-            if (lines[index].includes(n[jndex])||lines[index].includes('n0'))
-                lines[index] = '';
-    return lines;
-}
-
-function fixDecs(lines, index){
-    let n = [];
-    let vs = '';
-    for (;index<lines.length;index++)
-        if (lines[index].includes('let') && lines[index+1].includes('let'))
-        {
-            n.push(lines[index].substring(0, lines[index].indexOf(' ')));
-            vs += lines[index].substring(lines[index].indexOf('label="')+7, lines[index].indexOf(';')+1) + '\n';
-            lines[index] = '';
-        }
-        else {
-            n.push(lines[index].substring(0, lines[index].indexOf(' ')));
-            vs += lines[index].substring(lines[index].indexOf('label="')+7, lines[index].indexOf(';')+1);
-            lines[index] = lines[index].substring(0, lines[index].indexOf('"')) + '"' + vs + '" shape="box" style="filled" fillcolor="#2ca02c"]';
-            break;
-        }
-    return [lines, index, n];
 }
 
 String.prototype.replaceAll = function (search, replacement) {

@@ -1,5 +1,5 @@
 import * as esprima from 'esprima';
-import { FunctionDeclaration, Loop, If, AssignmentExpression, VariableDeclarator, ReturnStatement } from './model';
+import { FunctionDeclaration, Loop, If, AssignmentExpression, VariableDeclarator, ReturnStatement, UpdateExpression } from './model';
 import { isNumber } from 'util';
 const esgraph = require('esgraph');
 
@@ -442,6 +442,8 @@ function ExtractElement(obj) {
         return new FunctionDeclaration(obj);
     if (obj.type === 'AssignmentExpression')
         return new AssignmentExpression(obj);
+    if (obj.type === 'UpdateExpression')
+        return new UpdateExpression(obj);
     else
         return ExtractSpecial(obj);
 }

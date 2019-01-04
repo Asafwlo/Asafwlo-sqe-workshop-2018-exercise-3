@@ -76,6 +76,17 @@ export class AssignmentExpression{
     }
 }
 
+export class UpdateExpression{
+    constructor(obj){
+        this.type = 'Update Expression';
+        this.name = setDeclaration(obj.argument);
+        if (obj.prifix === false)
+            this.value = this.name + obj.operator;
+        else
+            this.value = obj.operator + this.name;        
+    }
+}
+
 function setDoWhileStatement(obj)
 {
     if (obj.test.hasOwnProperty('left'))
