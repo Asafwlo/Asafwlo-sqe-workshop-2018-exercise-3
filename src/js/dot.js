@@ -3,7 +3,7 @@ import {cfgCode, objectTable} from './code-analyzer';
 import {Parser} from 'expr-eval';
 
 
-
+var ifExist = false;
 var greenList = [];
 var greenNodes = [];
 var whileNodes = [];
@@ -11,7 +11,8 @@ var ifNodes = [];
 var white = '#ffffff';
 var green = '#2ca02c';
 var parser = new Parser({operators:{'in':true, '<':true, '>': true, '==': true, '!=': true, '<=': true, '>=': true}});
-
+var dotNum = 1;
+var nextNode = undefined;
 
 export function getDot(inputcodeToParse, gList){
     init();
@@ -30,11 +31,14 @@ function init(){
     whileNodes = [];
     white = '#ffffff';
     green = '#2ca02c';
+    dotNum = 1;
+    nextNode = undefined;
+    ifExist = false;
 }
 
 function createDot(dotParsedCode, inputcodeToParse)
 {
-    if (greenList.length == 0)
+    if (!ifExist)
         green = '#ffffff';
     let dot = esgraph.dot(dotParsedCode, { counter: 0, source: inputcodeToParse });
     dot = fixLines(dot);
@@ -85,22 +89,23 @@ function getWhiles(cfgCode, nodeCounter = 0) {
 
 function isIf(cfgCode)
 {
-    if ('parent' in cfgCode && cfgCode.parent != undefined && 'type' in cfgCode.parent && cfgCode.parent.type == 'IfStatement') 
+    if ('parent' in cfgCode && cfgCode.parent != undefined && 'type' in cfgCode.parent && cfgCode.parent.type == 'IfStatement'){ 
+        ifExist = true;
         return true;
+    }
     return false;
 }
 
-function getIfGreen(curr, counter, nextNodeCounter, nodeCounter, currName){
-    if (greenList.indexOf(counter) > -1)
+function getIfGreen(curr, counter, nextNodeCounter, nodeCounter){
+    if (greenList.indexOf(counter) > -1){
+        nextNode = getNode(curr.false);
         curr = getNode(curr.true);
+    }
     else {
         nextNodeCounter = getOtherGreens(curr.true, false, nodeCounter + 1, counter+1);
         curr = getNode(curr.false);
     }
-    if (currName != undefined)
-        ifNodes.push(currName);
-    else
-        ifNodes.push('n' + nodeCounter);
+    ifNodes.push('n' + nodeCounter);
     return [curr, nextNodeCounter];
 }
 
@@ -111,7 +116,7 @@ function getOtherGreens(cfgCode, add = true, nodeCounter = 0, counter = 1){
         if (currName == undefined)
             cfgCode['nodeName'] = 'n' + nodeCounter;
         if (isIf(cfgCode)) {
-            let res = getIfGreen(cfgCode, counter, nextNodeCounter, nodeCounter, currName);
+            let res = getIfGreen(cfgCode, counter, nextNodeCounter, nodeCounter);
             cfgCode = res[0]; 
             nextNodeCounter = res[1]; 
             counter++;
@@ -121,7 +126,17 @@ function getOtherGreens(cfgCode, add = true, nodeCounter = 0, counter = 1){
             insertToGreenNodes(currName, nodeCounter);
         nodeCounter = setNodeCounter(nextNodeCounter, nodeCounter,currName);
     } while (cfgCode != undefined);
-    return nodeCounter;
+    return stopGreens(nodeCounter, add, counter);
+}
+
+function stopGreens(nodeCounter, add, counter){
+    if (nextNode == undefined)
+        return nodeCounter;
+    else {
+        let cfg = nextNode;
+        nextNode = undefined;
+        return getOtherGreens(cfg, false, nodeCounter, counter);
+    }
 }
 
 function insertToGreenNodes(currName, nodeCounter){
@@ -151,51 +166,56 @@ function getNode(cfgItem)
     return undefined;
 }
 
+function addNumberToLabel(line, node){
+    let res = line;
+    if (node[0]=='n'){
+        let s = line.substring(0, line.indexOf('label') + 7);
+        let f = line.substring(line.indexOf('label') + 7);
+        res = s + dotNum + ') ' + f;
+        dotNum++;
+    }
+    
+    return res;
+
+}
+
 function paintOtherGreens(dot)
 {
     let lines = dot.split('\n');
     for (let index = 0; index < lines.length; index++)
     {
         let node = lines[index].substring(0, lines[index].indexOf(' '));
+        if (!lines[index].includes('->'))
+            lines[index] = addNumberToLabel(lines[index], node);
         if (isGreenNodeLine(node, lines, index))
-        {
-            if (!lines[index].includes('fillcolor'))
-                lines[index] = saveLine(node, lines, index);
-            else
-                lines[index] = lines[index].substring(0, lines[index].indexOf('fillcolor')) + 'fillcolor="'+green+'"]';
-        }
+            lines[index] = saveLine(node, lines, index, green);
         else if (isNodeLine(node, lines, index))
-            lines[index] = makeSquare(lines, index);
+            lines[index] = saveLine(node, lines, index, white);
     }
     return lines.join('\n');
 }
 
-function saveLine(node, lines, index)
+function saveLine(node, lines, index, color)
 {
     if (ifNodes.indexOf(node) > -1)
-        return lines[index].substring(0, lines[index].indexOf(']')) + ' shape="diamond" style="filled" fillcolor="'+green+'"]';
+        return lines[index].substring(0, lines[index].length-1) + ' shape="diamond" style="filled" fillcolor="'+color+'"]';
     else
-        return lines[index].substring(0, lines[index].indexOf(']')) + ' shape="box" style="filled" fillcolor="'+green+'"]';
+        return lines[index].substring(0, lines[index].length-1) + ' shape="box" style="filled" fillcolor="'+color+'"]';
 }
 
 function isGreenNodeLine(node, lines, index)
 {
-    if (greenNodes.indexOf(node) > -1 && lines[index].includes(']')  && lines[index].includes(node) && !lines[index].includes('->'))
+    if (greenNodes.indexOf(node) > -1 && lines[index][lines[index].length-1] == ']'  && lines[index].includes(node) && !lines[index].includes('->'))
         return true;
     return false;
 }
 
 function isNodeLine(node, lines, index)
 {
-    if (lines[index].includes(']')  && lines[index].includes(node) && !lines[index].includes('->') && lines[index][0] === 'n')
+    if (lines[index][lines[index].length-1] == ']'  && lines[index].includes(node) && !lines[index].includes('->') && lines[index][0] === 'n')
         return true;
     return false;
 
-}
-
-function makeSquare(lines, index)
-{
-    return lines[index].substring(0, lines[index].indexOf(']')) + ' shape="box" style="filled" fillcolor="'+white+'"]';
 }
 
 function exclude(lines, index){

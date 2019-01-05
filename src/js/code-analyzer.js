@@ -12,6 +12,8 @@ var alternate = false;
 var tempVars = {};
 var globals = [];
 var isGlobals = true;
+var globalVars = [];
+var doneAss = false;
 const parseCode = (codeToParse) => {
     return esprima.parseScript(codeToParse);
 };
@@ -28,11 +30,21 @@ const objectTable = (parsedCode) => {
     isGlobals = true;
     variables = {};
     values = {};
+    globalVars = {};
+    doneAss = false;
     createObjectTable(parsedCode);
     createFunction();
+    replaceGlobals();
     fixValues();
     return { 'func': func, 'values': values };
 };
+
+function replaceGlobals(){
+    for (var i in values){
+        if (i in globalVars)
+            values[i] = globalVars[i];
+    }
+}
 
 function fixValues(){
     for (var i in values)
@@ -75,8 +87,10 @@ function handleFD(row, index) {
         globals.push(row.params[i].name);
         s += row.params[i].name + ', ';
         if (row.params[i].hasOwnProperty('value'))    
-            if (!(row.params[i].name in values))
+            if (!(row.params[i].name in values)){
                 values[row.params[i].name] = row.params[i].value;
+                globalVars[row.params[i].name] = row.params[i].value;
+            }
     }
     s = s.substring(0, s.length - 2) + ') {';
     insertToFunc(s);
@@ -86,14 +100,16 @@ function handleFD(row, index) {
 function handleAE(row, index) {
     if (isNaN(row.value))
         replaceVariables(row);
-    else
+    else{
         values[row.name] = row.value;
+        if (!doneAss)
+            globalVars[row.name] = row.value;
+    }
     if (globals.indexOf(row.name.split('[')[0]) > -1){
         insertToFunc(row.name + ' = ' + row.value + ';');
-        //if (row.name.includes('['))
-        //    values[row.name.replace('[', '_').replace(']','_')] = row.value;
-        //else
         values[row.name] = row.value;
+        if (!doneAss)
+            globalVars[row.name] = row.value;
     }
     return index;
 }
@@ -112,10 +128,10 @@ function replaceVars(a, b, text) {
     }
     else
     {
-        var end = text.substring(text.indexOf(a), text.indexOf(']', text.indexOf(a))+1);
+        //var start = text.substring(text.indexOf(a), text.indexOf(']', text.indexOf(a))+1);
         var pos = b.substring(1,b.length-1).split(',');
-        var index = end.split('[')[1].split(']')[0];
-        text = text.substring(0, text.indexOf(a)) + pos[index];
+        var v = '[' + pos.join(',') + ']';
+        text = v + ';';
         text = removeZero(text);
     }
     return text;
@@ -158,13 +174,13 @@ function replaceVariables(row) {
     for (var i in features)
         if (features[i] in variables) {
             row.value = setRowValue(row, features, i);
-            //if (isGlobals)
-            //    values[row.name] = row.value;
-            //else
             variables[row.name] = row.value;
         }
-        else if (isGlobals)
+        else if (isGlobals){
             values[row.name] = row.value;
+            if (!doneAss)
+                globalVars[row.name] = row.value;
+        }
         else
             variables[row.name] = row.value;
     return row.value;
@@ -184,8 +200,10 @@ function handleVD(row, index) {
 }
 
 function inserGlobaltToValues(row){
-    if (isGlobals)
+    if (isGlobals){
         values[row.name] = row.value;
+        globalVars[row.name] = row.value;
+    }
     else {
         if (row.value.includes('['))
             values[row.name] = row.value;
@@ -218,6 +236,7 @@ function handleCases(type, obj, index) {
 }
 
 function handleStatements(type, obj, index) {
+    doneAss = true;
     switch (type) {
     case 'Return Statement':
         return handleRS(obj, index);

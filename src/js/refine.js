@@ -24,8 +24,10 @@ function replaceCodeParams(cparams, been, code){
     var indexV = 0;
     for (let index=0;index<cparams.length;index++)
     {
-        if (!cparams[index].includes('='))
+        if (!cparams[index].includes('=')){
+            indexV++;
             continue;
+        }
         let inputText = setInputParams(cparams, index);
         let vars = inputText.split(';')[0];
         var res = getVName(cparams, indexV);
@@ -33,7 +35,7 @@ function replaceCodeParams(cparams, been, code){
         index = inputText.split(';')[1];
         if (res.split(';')[0] in been)
             continue;
-        code = 'let ' + res.split(';')[0] + '=' + vars + ';' + code;
+        code = 'let ' + vars + ';' + code;
     }
     return code;
 }
@@ -51,10 +53,11 @@ function replaceParams(input, code){
 
 function getVName(v, index){
     var res = '';
-    if (v[index].includes('[')){
+    if (v[index].includes('=')){
         res = v[index].split('=')[0].trim();
-        while (!v.includes(']'))
-            index++;
+        if (v[index].includes('['))
+            while (index < v.length && !v[index].includes(']'))
+                index++;
     }
     else
         res = v[index].trim();

@@ -80,7 +80,7 @@ export class UpdateExpression{
     constructor(obj){
         this.type = 'Update Expression';
         this.name = setDeclaration(obj.argument);
-        if (obj.prifix === false)
+        if (obj.prefix === false)
             this.value = this.name + obj.operator;
         else
             this.value = obj.operator + this.name;        
@@ -89,12 +89,7 @@ export class UpdateExpression{
 
 function setDoWhileStatement(obj)
 {
-    if (obj.test.hasOwnProperty('left'))
-    {
-        return setDeclaration(obj.test.left) + obj.test.operator + setDeclaration(obj.test.right);
-    }
-    else 
-        return setDeclaration(obj.test);
+    return setDeclaration(obj.test.left) + obj.test.operator + setDeclaration(obj.test.right);
 }
 
 // function setForStatement(obj)
